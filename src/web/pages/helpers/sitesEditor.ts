@@ -20,6 +20,7 @@ export type SiteForm = {
   useSystemProxy: boolean;
   apiEndpoints: SiteApiEndpointField[];
   customHeaders: SiteCustomHeaderField[];
+  clientSpoofing: string;
   globalWeight: string;
 };
 
@@ -41,6 +42,7 @@ export type SiteSavePayload = {
     sortOrder: number;
   }>;
   customHeaders: string;
+  clientSpoofing: string;
   globalWeight: number;
   postRefreshProbeEnabled?: boolean;
   postRefreshProbeModel?: string;
@@ -79,6 +81,7 @@ export function emptySiteForm(): SiteForm {
     useSystemProxy: false,
     apiEndpoints: [emptySiteApiEndpoint()],
     customHeaders: [emptySiteCustomHeader()],
+    clientSpoofing: 'none',
     globalWeight: '1',
   };
 }
@@ -131,7 +134,7 @@ function parseApiEndpointsForEditor(raw: unknown): SiteApiEndpointField[] {
   return ensureSiteApiEndpointRows(rows);
 }
 
-export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | 'customHeaders' | 'globalWeight' | 'externalCheckinUrl' | 'proxyUrl' | 'useSystemProxy'>> & {
+export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | 'customHeaders' | 'globalWeight' | 'externalCheckinUrl' | 'proxyUrl' | 'useSystemProxy' | 'clientSpoofing'>> & {
   externalCheckinUrl?: string | null;
   proxyUrl?: string | null;
   useSystemProxy?: boolean | null;
@@ -142,10 +145,12 @@ export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | '
     lastFailureReason?: string | null;
   }> | null;
   customHeaders?: string | null;
+  clientSpoofing?: string | null;
   globalWeight?: number | string | null;
 }): SiteForm {
   const globalWeightRaw = Number(site.globalWeight);
   const globalWeight = Number.isFinite(globalWeightRaw) && globalWeightRaw > 0 ? String(globalWeightRaw) : '1';
+  const clientSpoofing = typeof site.clientSpoofing === 'string' ? site.clientSpoofing : 'none';
   return {
     name: site.name ?? '',
     url: site.url ?? '',
@@ -155,6 +160,7 @@ export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | '
     useSystemProxy: !!site.useSystemProxy,
     apiEndpoints: parseApiEndpointsForEditor(site.apiEndpoints),
     customHeaders: parseCustomHeadersForEditor(site.customHeaders),
+    clientSpoofing,
     globalWeight,
   };
 }

@@ -7,8 +7,9 @@ import { isIP, type Socket } from 'node:net';
 import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 import { SocksClient } from 'socks';
 import type { Dispatcher, RequestInit as UndiciRequestInit } from 'undici';
-import { Agent as UndiciAgent, ProxyAgent } from 'undici';
+import { Agent as UndiciAgent, ProxyAgent, Headers } from 'undici';
 import { mergeHeadersWithSiteCustomHeaders } from './siteCustomHeaders.js';
+import { getClientSpoofingHeaders, parseClientSpoofingMode } from './siteClientSpoofing.js';
 import { resolveProxyUrlFromExtraConfig } from './accountExtraConfig.js';
 import { stripTrailingSlashes } from './urlNormalization.js';
 
@@ -37,6 +38,7 @@ type SiteProxyRow = {
   proxyUrl: string | null;
   useSystemProxy: boolean;
   customHeaders: unknown;
+  clientSpoofing: unknown;
 };
 
 type ParsedSiteProxyInput = {
@@ -49,6 +51,7 @@ export type SiteProxyConfigLike = {
   proxyUrl?: string | null;
   useSystemProxy?: boolean | null;
   customHeaders?: unknown;
+  clientSpoofing?: unknown;
 };
 
 let siteProxyCache: {
@@ -121,6 +124,7 @@ async function getCachedSiteProxyRows(nowMs = Date.now()): Promise<SiteProxyRow[
           proxyUrl: schema.sites.proxyUrl,
           useSystemProxy: schema.sites.useSystemProxy,
           customHeaders: schema.sites.customHeaders,
+          clientSpoofing: schema.sites.clientSpoofing,
         })
         .from(schema.sites)
         .all(),
@@ -148,6 +152,7 @@ async function getCachedSiteProxyRows(nowMs = Date.now()): Promise<SiteProxyRow[
         proxyUrl: normalizeSiteProxyUrl(row.proxyUrl),
         useSystemProxy: !!row.useSystemProxy,
         customHeaders: row.customHeaders ?? null,
+        clientSpoofing: row.clientSpoofing ?? 'none',
       })),
       systemProxyUrl: parsedSystemProxyUrl,
     };
@@ -355,6 +360,42 @@ export function invalidateSiteProxyCache(): void {
   siteProxyCache = { loadedAt: 0, rows: [], systemProxyUrl: null };
 }
 
+/**
+ * 合并客户端伪装请求头、自定义请求头和请求自带的请求头
+ * 优先级（从低到高）：客户端伪装 < 自定义请求头 < 请求自带的请求头
+ */
+function mergeAllHeaders(
+  clientSpoofing: unknown,
+  customHeaders: unknown,
+  requestHeaders?: UndiciRequestInit['headers'],
+): Record<string, string> | undefined {
+  const spoofingMode = parseClientSpoofingMode(clientSpoofing);
+  const spoofingHeaders = getClientSpoofingHeaders(spoofingMode);
+
+  // 第一步：应用客户端伪装请求头作为基础
+  const merged: Record<string, string> = spoofingHeaders ? { ...spoofingHeaders } : {};
+
+  // 第二步：合并自定义请求头（会覆盖伪装请求头）
+  const customHeadersMerged = mergeHeadersWithSiteCustomHeaders(customHeaders, undefined);
+  if (customHeadersMerged) {
+    const customHeadersObj = new Headers(customHeadersMerged as any);
+    customHeadersObj.forEach((value, key) => {
+      merged[key] = value;
+    });
+  }
+
+  // 第三步：合并请求自带的请求头（优先级最高）
+  if (requestHeaders) {
+    const explicitHeaders = new Headers(requestHeaders as any);
+    explicitHeaders.forEach((value, key) => {
+      merged[key] = value;
+    });
+  }
+
+  // 如果最终没有任何请求头，返回 undefined
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 function findBestMatchingSiteRow(rows: SiteProxyRow[], normalizedRequestUrl: string): SiteProxyRow | null {
   let bestMatch: SiteProxyRow | null = null;
   let bestMatchLength = -1;
@@ -381,10 +422,11 @@ function findBestMatchingSiteRow(rows: SiteProxyRow[], normalizedRequestUrl: str
 async function resolveSiteRequestConfigByRequestUrl(requestUrl: string): Promise<{
   proxyUrl: string | null;
   customHeaders: unknown;
+  clientSpoofing: unknown;
 }> {
   const normalizedRequestUrl = normalizeSiteUrl(requestUrl);
   if (!normalizedRequestUrl) {
-    return { proxyUrl: null, customHeaders: null };
+    return { proxyUrl: null, customHeaders: null, clientSpoofing: 'none' };
   }
 
   const rows = await getCachedSiteProxyRows();
@@ -394,6 +436,7 @@ async function resolveSiteRequestConfigByRequestUrl(requestUrl: string): Promise
   return {
     proxyUrl: proxyUrl || null,
     customHeaders: matchedRow?.customHeaders ?? null,
+    clientSpoofing: matchedRow?.clientSpoofing ?? 'none',
   };
 }
 
@@ -410,7 +453,7 @@ export async function withSiteProxyRequestInit(
   const nextOptions: UndiciRequestInit = {
     ...(options || {}),
   };
-  const mergedHeaders = mergeHeadersWithSiteCustomHeaders(resolved.customHeaders, options?.headers);
+  const mergedHeaders = mergeAllHeaders(resolved.clientSpoofing, resolved.customHeaders, options?.headers);
   if (mergedHeaders) {
     nextOptions.headers = mergedHeaders;
   }
@@ -465,7 +508,7 @@ export function withSiteRecordProxyRequestInit(
   const nextOptions: UndiciRequestInit = {
     ...(options || {}),
   };
-  const mergedHeaders = mergeHeadersWithSiteCustomHeaders(site?.customHeaders, options?.headers);
+  const mergedHeaders = mergeAllHeaders(site?.clientSpoofing, site?.customHeaders, options?.headers);
   if (mergedHeaders) {
     nextOptions.headers = mergedHeaders;
   }

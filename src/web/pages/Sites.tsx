@@ -63,6 +63,7 @@ type SiteRow = {
   proxyUrl?: string | null;
   useSystemProxy?: boolean;
   customHeaders?: string | null;
+  clientSpoofing?: string | null;
   globalWeight?: number;
   isPinned?: boolean;
   sortOrder?: number;
@@ -767,6 +768,7 @@ export default function Sites() {
       useSystemProxy: !!form.useSystemProxy,
       apiEndpoints: serializedApiEndpoints.apiEndpoints,
       customHeaders: serializedCustomHeaders.customHeaders,
+      clientSpoofing: form.clientSpoofing || 'none',
       globalWeight: Number(parsedGlobalWeight.toFixed(3)),
       postRefreshProbeEnabled: probeEnabled,
       postRefreshProbeModel: probeModel.trim(),
@@ -1922,6 +1924,24 @@ export default function Sites() {
               />
               使用系统代理
             </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>
+                客户端伪装
+              </div>
+              <ModernSelect
+                value={form.clientSpoofing}
+                onChange={(value) => setForm((prev) => ({ ...prev, clientSpoofing: value }))}
+                options={[
+                  { value: 'none', label: '不伪装' },
+                  { value: 'codex', label: 'Codex CLI' },
+                  { value: 'claude_code', label: 'Claude Code' },
+                ]}
+                placeholder="选择客户端伪装"
+              />
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+                开启后，该站点所有请求将自动添加对应客户端的特征请求头，绕过 API 站点的客户端限制。
+              </div>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <input
                 placeholder="站点全局权重（默认 1）"

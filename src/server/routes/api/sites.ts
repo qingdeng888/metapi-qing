@@ -92,6 +92,16 @@ function normalizeOptionalExternalCheckinUrl(input: unknown): {
   return { valid: true, present: true, url: parsed.toString().replace(/\/+$/, '') };
 }
 
+function normalizeClientSpoofing(input: unknown): 'none' | 'codex' | 'claude_code' | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== 'string') return null;
+  const normalized = input.trim().toLowerCase();
+  if (normalized === 'none' || normalized === 'codex' || normalized === 'claude_code') {
+    return normalized;
+  }
+  return null;
+}
+
 type ErrorLike = {
   message?: string;
   code?: string | number;
@@ -472,6 +482,7 @@ export async function sitesRoutes(app: FastifyInstance) {
       proxyUrl,
       useSystemProxy,
       customHeaders,
+      clientSpoofing,
       externalCheckinUrl,
       status,
       isPinned,
@@ -510,6 +521,10 @@ export async function sitesRoutes(app: FastifyInstance) {
     const normalizedCustomHeaders = parseSiteCustomHeadersInput(customHeaders);
     if (!normalizedCustomHeaders.valid) {
       return reply.code(400).send({ error: normalizedCustomHeaders.error || 'Invalid customHeaders.' });
+    }
+    const normalizedClientSpoofing = normalizeClientSpoofing(clientSpoofing);
+    if (clientSpoofing !== undefined && normalizedClientSpoofing === null) {
+      return reply.code(400).send({ error: 'Invalid clientSpoofing value. Expected none, codex, or claude_code.' });
     }
     const explicitInitializationPreset = initializationPresetId == null || initializationPresetId === ''
       ? null
@@ -560,6 +575,7 @@ export async function sitesRoutes(app: FastifyInstance) {
           proxyUrl: normalizedProxyUrl.proxyUrl,
           useSystemProxy: normalizedUseSystemProxy ?? false,
           customHeaders: normalizedCustomHeaders.customHeaders,
+          clientSpoofing: normalizedClientSpoofing ?? 'none',
           externalCheckinUrl: normalizedExternalCheckinUrl.url,
           status: normalizedStatus ?? 'active',
           isPinned: normalizedPinned ?? false,
@@ -651,6 +667,10 @@ export async function sitesRoutes(app: FastifyInstance) {
     if (!normalizedCustomHeaders.valid) {
       return reply.code(400).send({ error: normalizedCustomHeaders.error || 'Invalid customHeaders.' });
     }
+    const normalizedClientSpoofing = normalizeClientSpoofing(body.clientSpoofing);
+    if (body.clientSpoofing !== undefined && normalizedClientSpoofing === null) {
+      return reply.code(400).send({ error: 'Invalid clientSpoofing value. Expected none, codex, or claude_code.' });
+    }
     const normalizedApiEndpoints = normalizeSiteApiEndpointsInput(body.apiEndpoints);
     if (!normalizedApiEndpoints.valid) {
       return reply.code(400).send({ error: normalizedApiEndpoints.error || 'Invalid apiEndpoints.' });
@@ -683,6 +703,7 @@ export async function sitesRoutes(app: FastifyInstance) {
     if (normalizedProxyUrl.present) updates.proxyUrl = normalizedProxyUrl.proxyUrl;
     if (body.useSystemProxy !== undefined) updates.useSystemProxy = normalizedUseSystemProxy;
     if (normalizedCustomHeaders.present) updates.customHeaders = normalizedCustomHeaders.customHeaders;
+    if (body.clientSpoofing !== undefined) updates.clientSpoofing = normalizedClientSpoofing;
     if (normalizedExternalCheckinUrl.present) updates.externalCheckinUrl = normalizedExternalCheckinUrl.url;
     if (body.status !== undefined) updates.status = normalizedStatus;
     if (body.isPinned !== undefined) updates.isPinned = normalizedPinned;
