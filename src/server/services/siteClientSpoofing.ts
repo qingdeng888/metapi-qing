@@ -10,13 +10,12 @@ export type SiteClientSpoofingHeaders = Record<string, string>;
 /**
  * Codex CLI 标准请求头模板
  * 基于 src/server/proxy-core/cliProfiles/codexProfile.ts 的检测逻辑
+ * 使用 codex_cli_rs 作为官方 CLI 客户端标识
  */
 function getCodexSpoofingHeaders(): SiteClientSpoofingHeaders {
   return {
-    'User-Agent': 'Codex/1.0.0',
-    'X-Codex-Client': 'codex-cli',
-    'X-Codex-Version': '1.0.0',
-    'OpenAI-Beta': 'responses=compact',
+    'User-Agent': 'codex_cli_rs/1.0.0',
+    'Originator': 'codex_cli_rs',
   };
 }
 
