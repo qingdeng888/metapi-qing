@@ -1,6 +1,11 @@
 services:
   metapi:
-    image: 1467078763/metapi:latest
+    # 本地构建使用 image: metapi:local
+    # 远程部署使用 image: 1467078763/metapi:latest
+    image: metapi:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
