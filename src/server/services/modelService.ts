@@ -642,6 +642,19 @@ export async function refreshModelsForAccount(
       .all()))).flat()
     : [];
 
+  // 保存之前启用的模型列表（用于判断新发现的模型是否应该启用）
+  const previousEnabledModels = new Set(
+    (await db.select({ modelName: schema.modelAvailability.modelName })
+      .from(schema.modelAvailability)
+      .where(and(
+        eq(schema.modelAvailability.accountId, accountId),
+        eq(schema.modelAvailability.available, true),
+        eq(schema.modelAvailability.isManual, false),
+      ))
+      .all()
+    ).map((r) => r.modelName.toLowerCase()),
+  );
+
   const clearExistingAvailability = async () => {
     await db.delete(schema.modelAvailability)
       .where(and(
@@ -691,6 +704,11 @@ export async function refreshModelsForAccount(
     ).map((r) => r.modelName.toLowerCase()),
   );
 
+  // 判断模型是否应该被启用（新发现的模型默认禁用，只有之前启用过的才启用）
+  const shouldEnableModel = (modelName: string): boolean => {
+    return previousEnabledModels.has(modelName.toLowerCase());
+  };
+
   if (isSiteDisabled(site.status)) {
     return buildSkippedRefreshResult(accountId, 'site_disabled', '站点已禁用');
   }
@@ -724,7 +742,7 @@ export async function refreshModelsForAccount(
           newCodexModels.map((modelName) => ({
             accountId,
             modelName,
-            available: true,
+            available: shouldEnableModel(modelName), // 新增模型默认禁用，只有之前启用过的才启用
             latencyMs: Date.now() - startedAt,
             checkedAt,
           })),
@@ -810,7 +828,7 @@ export async function refreshModelsForAccount(
           newClaudeModels.map((modelName) => ({
             accountId,
             modelName,
-            available: true,
+            available: shouldEnableModel(modelName), // 新增模型默认禁用，只有之前启用过的才启用
             latencyMs: Date.now() - startedAt,
             checkedAt,
           })),
@@ -910,7 +928,7 @@ export async function refreshModelsForAccount(
           newGeminiModels.map((modelName) => ({
             accountId,
             modelName,
-            available: true,
+            available: shouldEnableModel(modelName), // 新增模型默认禁用，只有之前启用过的才启用
             latencyMs: Date.now() - startedAt,
             checkedAt,
           })),
@@ -996,7 +1014,7 @@ export async function refreshModelsForAccount(
           newAntigravityModels.map((modelName) => ({
             accountId,
             modelName,
-            available: true,
+            available: shouldEnableModel(modelName), // 新增模型默认禁用，只有之前启用过的才启用
             latencyMs: Date.now() - startedAt,
             checkedAt,
           })),
@@ -1262,7 +1280,7 @@ export async function refreshModelsForAccount(
       newAccountModels.map((modelName) => ({
         accountId: account.id,
         modelName,
-        available: true,
+        available: shouldEnableModel(modelName), // 新增模型默认禁用，只有之前启用过的才启用
         latencyMs: modelLatency.get(modelName.toLowerCase()) ?? null,
         checkedAt,
       })),
