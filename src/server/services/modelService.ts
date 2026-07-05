@@ -642,6 +642,15 @@ export async function refreshModelsForAccount(
       .all()))).flat()
     : [];
 
+  // 查询之前的所有模型（用于判断是否是首次添加）
+  const previousAllModels = await db.select({ modelName: schema.modelAvailability.modelName })
+    .from(schema.modelAvailability)
+    .where(and(
+      eq(schema.modelAvailability.accountId, accountId),
+      eq(schema.modelAvailability.isManual, false),
+    ))
+    .all();
+
   // 保存之前启用的模型列表（用于判断新发现的模型是否应该启用）
   const previousEnabledModels = new Set(
     (await db.select({ modelName: schema.modelAvailability.modelName })
@@ -654,6 +663,9 @@ export async function refreshModelsForAccount(
       .all()
     ).map((r) => r.modelName.toLowerCase()),
   );
+
+  // 判断是否是首次添加（之前没有任何模型记录）
+  const isFirstTimeSetup = previousAllModels.length === 0;
 
   const clearExistingAvailability = async () => {
     await db.delete(schema.modelAvailability)
@@ -704,9 +716,14 @@ export async function refreshModelsForAccount(
     ).map((r) => r.modelName.toLowerCase()),
   );
 
-  // 判断模型是否应该被启用（新发现的模型默认禁用，只有之前启用过的才启用）
+  // 判断模型是否应该被启用
+  // - 首次添加渠道：所有模型默认启用
+  // - 后续刷新：新发现的模型默认禁用，只有之前启用过的才保持启用
   const shouldEnableModel = (modelName: string): boolean => {
-    return previousEnabledModels.has(modelName.toLowerCase());
+    if (isFirstTimeSetup) {
+      return true; // 首次添加，默认启用所有模型
+    }
+    return previousEnabledModels.has(modelName.toLowerCase()); // 后续刷新，只启用之前启用过的
   };
 
   if (isSiteDisabled(site.status)) {

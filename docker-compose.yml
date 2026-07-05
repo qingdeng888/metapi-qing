@@ -1,0 +1,19 @@
+services:
+  metapi:
+    # 本地构建使用 image: metapi:local
+    # 远程部署使用 image: 1467078763/metapi:latest
+    image: metapi:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-4000}
+      DATA_DIR: /app/data
+      TZ: ${TZ:-Asia/Shanghai}
+    restart: unless-stopped
