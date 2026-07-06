@@ -26,6 +26,7 @@ export type DownstreamApiKeyPolicyView = {
   usedRequests: number;
   supportedModels: string[];
   allowedRouteIds: number[];
+  autoSyncRoutes: boolean;
   siteWeightMultipliers: Record<number, number>;
   excludedSiteIds: number[];
   excludedCredentialRefs: DownstreamExcludedCredentialRef[];
@@ -364,6 +365,7 @@ export function toDownstreamApiKeyPolicyView(row: DownstreamApiKeyRow): Downstre
     usedRequests: Number(row.usedRequests || 0),
     supportedModels,
     allowedRouteIds,
+    autoSyncRoutes: !!row.autoSyncRoutes,
     siteWeightMultipliers,
     excludedSiteIds,
     excludedCredentialRefs,

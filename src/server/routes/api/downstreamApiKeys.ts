@@ -18,6 +18,7 @@ import {
   resolveDownstreamTrendTimeZone,
   type DownstreamKeyTrendRange,
 } from '../../services/downstreamApiKeyTrendService.js';
+import { syncDownstreamKeysWithRoutes } from '../../services/downstreamKeySyncService.js';
 import {
   parseDownstreamApiKeyBatchPayload,
   parseDownstreamApiKeyPayload,
@@ -535,9 +536,18 @@ export async function downstreamApiKeysRoutes(app: FastifyInstance) {
         loadErrorMessage: '创建失败',
       });
 
+      const result = toDownstreamApiKeyPolicyView(inserted);
+
+      // 如果启用了自动同步，立即触发一次同步
+      if ((body as any).autoSyncRoutes) {
+        syncDownstreamKeysWithRoutes().catch((error) => {
+          console.error('Failed to sync downstream keys with routes:', error);
+        });
+      }
+
       return {
         success: true,
-        item: toDownstreamApiKeyPolicyView(inserted),
+        item: result,
       };
     } catch (error: unknown) {
       if (looksLikeUniqueViolation(error)) {
@@ -632,6 +642,15 @@ export async function downstreamApiKeysRoutes(app: FastifyInstance) {
       }).where(eq(schema.downstreamApiKeys.id, id)).run();
 
       const updated = await getDownstreamApiKeyById(id);
+
+      // 如果启用了自动同步，立即触发一次同步
+      const autoSyncEnabled = hasOwn('autoSyncRoutes') ? body.autoSyncRoutes : existing.autoSyncRoutes;
+      if (autoSyncEnabled) {
+        syncDownstreamKeysWithRoutes().catch((error) => {
+          console.error('Failed to sync downstream keys with routes:', error);
+        });
+      }
+
       return {
         success: true,
         item: updated,
