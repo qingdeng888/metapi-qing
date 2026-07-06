@@ -3,9 +3,17 @@ import {
   rebuildTokenRoutesFromAvailability,
   refreshModelsAndRebuildRoutes as refreshModelsAndRebuildRoutesViaModelService,
 } from './modelService.js';
+import { syncDownstreamKeysWithRoutes } from './downstreamKeySyncService.js';
 
 export async function rebuildRoutesOnly() {
-  return rebuildTokenRoutesFromAvailability();
+  const result = await rebuildTokenRoutesFromAvailability();
+
+  // 路由重建后，自动同步所有启用自动同步的下游密钥
+  syncDownstreamKeysWithRoutes().catch((error) => {
+    console.error('[rebuildRoutesOnly] Failed to sync downstream keys:', error);
+  });
+
+  return result;
 }
 
 export async function rebuildRoutesBestEffort() {
