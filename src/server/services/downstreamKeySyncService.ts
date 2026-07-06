@@ -10,12 +10,15 @@ export async function syncDownstreamKeysWithRoutes(): Promise<{ synced: number }
   // 查询所有启用了自动同步的密钥
   const keysToSync = await db.select()
     .from(schema.downstreamApiKeys)
-    .where(eq(schema.downstreamApiKeys.autoSyncRoutes, true))
+    .where(eq(schema.downstreamApiKeys.autoSyncRoutes, 1))
     .all();
 
   if (keysToSync.length === 0) {
+    console.log('[sync] No keys with autoSyncRoutes enabled');
     return { synced: 0 };
   }
+
+  console.log(`[sync] Found ${keysToSync.length} keys to sync`);
 
   // 查询所有可用的路由
   const allRoutes = await db.select({
@@ -26,6 +29,8 @@ export async function syncDownstreamKeysWithRoutes(): Promise<{ synced: number }
     .from(schema.tokenRoutes)
     .where(eq(schema.tokenRoutes.enabled, true))
     .all();
+
+  console.log(`[sync] Found ${allRoutes.length} enabled routes`);
 
   // 分离精确模型和群组路由
   const exactModels: string[] = [];
@@ -43,6 +48,8 @@ export async function syncDownstreamKeysWithRoutes(): Promise<{ synced: number }
   const uniqueModels = Array.from(new Set(exactModels)).sort();
   const uniqueGroupRouteIds = Array.from(new Set(groupRouteIds)).sort();
 
+  console.log(`[sync] Exact models: ${uniqueModels.length}, Group routes: ${uniqueGroupRouteIds.length}`);
+
   // 更新所有需要同步的密钥
   const nowIso = new Date().toISOString();
   let syncedCount = 0;
@@ -57,9 +64,11 @@ export async function syncDownstreamKeysWithRoutes(): Promise<{ synced: number }
       .where(eq(schema.downstreamApiKeys.id, key.id))
       .run();
 
+    console.log(`[sync] Updated key ${key.id} (${key.name})`);
     syncedCount++;
   }
 
+  console.log(`[sync] Synced ${syncedCount} keys`);
   return { synced: syncedCount };
 }
 
