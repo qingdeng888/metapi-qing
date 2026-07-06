@@ -31,6 +31,7 @@ import {
   listOauthRouteUnitMembersByUnitIds,
   loadOauthRouteUnitSummariesByIds,
 } from '../../services/oauth/routeUnitService.js';
+import { syncDownstreamKeysWithRoutes } from '../../services/downstreamKeySyncService.js';
 import { normalizeTokenRouteMode, type RouteMode } from '../../../shared/tokenRouteContract.js';
 import {
   parseRouteChannelBatchCreatePayload,
@@ -1149,6 +1150,12 @@ export async function tokensRoutes(app: FastifyInstance) {
       await populateRouteChannelsByModelPattern(route.id, modelPattern);
     }
     invalidateTokenRouterCache();
+
+    // 同步启用了自动同步的下游密钥
+    syncDownstreamKeysWithRoutes().catch((error) => {
+      console.error('Failed to sync downstream keys with routes:', error);
+    });
+
     return await getRouteWithSources(routeId);
   });
 
@@ -1243,6 +1250,14 @@ export async function tokensRoutes(app: FastifyInstance) {
       await clearDependentExplicitGroupSnapshotsBySourceRouteIds(syncedSourceRouteIds);
     }
     invalidateTokenRouterCache();
+
+    // 同步启用了自动同步的下游密钥
+    if (routeBehaviorChanged) {
+      syncDownstreamKeysWithRoutes().catch((error) => {
+        console.error('Failed to sync downstream keys with routes:', error);
+      });
+    }
+
     return await getRouteWithSources(id);
   });
 
@@ -1252,6 +1267,12 @@ export async function tokensRoutes(app: FastifyInstance) {
     await clearDependentExplicitGroupSnapshotsBySourceRouteIds([id]);
     await db.delete(schema.tokenRoutes).where(eq(schema.tokenRoutes.id, id)).run();
     invalidateTokenRouterCache();
+
+    // 同步启用了自动同步的下游密钥
+    syncDownstreamKeysWithRoutes().catch((error) => {
+      console.error('Failed to sync downstream keys with routes:', error);
+    });
+
     return { success: true };
   });
 
@@ -1295,6 +1316,11 @@ export async function tokensRoutes(app: FastifyInstance) {
     await clearRouteDecisionSnapshots(ids);
     await clearDependentExplicitGroupSnapshotsBySourceRouteIds(ids);
     invalidateTokenRouterCache();
+
+    // 同步启用了自动同步的下游密钥
+    syncDownstreamKeysWithRoutes().catch((error) => {
+      console.error('Failed to sync downstream keys with routes:', error);
+    });
 
     return { success: true, updatedCount: Number(updateResult?.changes || 0) };
   });

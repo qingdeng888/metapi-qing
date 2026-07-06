@@ -349,6 +349,7 @@ function buildEditorForm(
     enabled: item?.enabled ?? true,
     selectedModels: uniqStrings(selectedModels),
     selectedGroupRouteIds: uniqIds(selectedGroupRouteIds),
+    autoSyncRoutes: (item as any)?.autoSyncRoutes ?? false,
     siteWeightMultipliersText: JSON.stringify(item?.siteWeightMultipliers || {}, null, 2),
     excludedSiteIds: normalizeExcludedSiteIds(Array.isArray(item?.excludedSiteIds) ? item.excludedSiteIds : []),
     excludedCredentialRefs: normalizeExcludedCredentialRefs(Array.isArray(item?.excludedCredentialRefs) ? item.excludedCredentialRefs : []),

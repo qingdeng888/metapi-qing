@@ -29,6 +29,7 @@ export type DownstreamKeyEditorForm = {
   enabled: boolean;
   selectedModels: string[];
   selectedGroupRouteIds: number[];
+  autoSyncRoutes: boolean;
   siteWeightMultipliersText: string;
   excludedSiteIds: number[];
   excludedCredentialRefs: DownstreamExcludedCredentialRef[];
@@ -459,6 +460,21 @@ export default function DownstreamKeyEditorModal({
                 style={{ ...inputStyle, minHeight: 96, resize: 'vertical', fontFamily: 'var(--font-mono)' }}
               />
               <div className="downstream-key-modal-help">用于对特定站点做分发倍率微调；留空或 `{}` 表示走默认倍率。</div>
+            </div>
+
+            <div className="downstream-key-modal-field downstream-key-modal-field-full">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.autoSyncRoutes}
+                  onChange={(e) => onChange((prev) => ({ ...prev, autoSyncRoutes: e.target.checked }))}
+                />
+                <span className="downstream-key-modal-label" style={{ marginBottom: 0 }}>自动同步路由模型</span>
+              </label>
+              <div className="downstream-key-modal-help">
+                启用后，此密钥将自动同步所有路由中的模型和群组，无需手动更新。当路由添加或删除模型时，会自动更新到此密钥。
+                {form.autoSyncRoutes && <span style={{ color: 'var(--color-warning)', display: 'block', marginTop: 4 }}>⚠️ 已启用自动同步，下方的模型白名单和群组范围设置将被忽略。</span>}
+              </div>
             </div>
 
             <div className="downstream-key-advanced-grid" style={{ gridTemplateColumns: '1fr' }}>

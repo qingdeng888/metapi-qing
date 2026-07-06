@@ -26,6 +26,7 @@ const downstreamApiKeyPayloadSchema = z.object({
   maxRequests: z.union([z.number(), z.string(), z.null()]).optional(),
   supportedModels: z.union([z.string(), z.array(z.string())]).optional(),
   allowedRouteIds: z.union([z.string(), z.array(z.union([z.number(), z.string()]))]).optional(),
+  autoSyncRoutes: z.boolean().optional(),
   siteWeightMultipliers: z.union([
     z.string(),
     z.record(z.string(), z.union([z.number(), z.string()])),
@@ -88,6 +89,9 @@ function formatDownstreamApiKeyPayloadError(error: z.ZodError): string {
   }
   if (firstPath === 'allowedRouteIds') {
     return 'Invalid allowedRouteIds. Expected string or array.';
+  }
+  if (firstPath === 'autoSyncRoutes') {
+    return 'Invalid autoSyncRoutes. Expected boolean.';
   }
   if (firstPath === 'siteWeightMultipliers') {
     return 'Invalid siteWeightMultipliers. Expected JSON object or string.';

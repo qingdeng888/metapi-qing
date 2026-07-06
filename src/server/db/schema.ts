@@ -506,6 +506,7 @@ export const downstreamApiKeys = sqliteTable('downstream_api_keys', {
   usedRequests: integer('used_requests').default(0),
   supportedModels: text('supported_models'), // JSON array<string>
   allowedRouteIds: text('allowed_route_ids'), // JSON array<number>
+  autoSyncRoutes: integer('auto_sync_routes', { mode: 'boolean' }).default(false), // 自动同步所有路由的模型
   siteWeightMultipliers: text('site_weight_multipliers'), // JSON object { [siteId]: multiplier }
   excludedSiteIds: text('excluded_site_ids'), // JSON array<number>
   excludedCredentialRefs: text('excluded_credential_refs'), // JSON array<DownstreamExcludedCredentialRef>
