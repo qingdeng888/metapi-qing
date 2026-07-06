@@ -10,7 +10,7 @@ export async function syncDownstreamKeysWithRoutes(): Promise<{ synced: number }
   // 查询所有启用了自动同步的密钥
   const keysToSync = await db.select()
     .from(schema.downstreamApiKeys)
-    .where(eq(schema.downstreamApiKeys.autoSyncRoutes, 1))
+    .where(eq(schema.downstreamApiKeys.autoSyncRoutes, true))
     .all();
 
   if (keysToSync.length === 0) {
