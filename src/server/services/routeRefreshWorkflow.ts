@@ -26,7 +26,14 @@ export async function rebuildRoutesBestEffort() {
 }
 
 export async function refreshModelsAndRebuildRoutes() {
-  return refreshModelsAndRebuildRoutesViaModelService();
+  const result = await refreshModelsAndRebuildRoutesViaModelService();
+
+  // 刷新模型并重建路由后，也要同步所有启用自动同步的下游密钥
+  syncDownstreamKeysWithRoutes().catch((error) => {
+    console.error('[refreshModelsAndRebuildRoutes] Failed to sync downstream keys:', error);
+  });
+
+  return result;
 }
 
 export function queueRefreshModelsAndRebuildRoutesTask(input: {

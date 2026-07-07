@@ -1561,6 +1561,7 @@ export async function rebuildTokenRoutesFromAvailability() {
     const routeChannelCount = channels.filter((channel) => channel.routeId === route.id).length;
     if (routeChannelCount > 0) {
       removedChannels += routeChannelCount;
+      await db.delete(schema.routeChannels).where(eq(schema.routeChannels.routeId, route.id)).run();
     }
 
     const deleted = (await db.delete(schema.tokenRoutes).where(eq(schema.tokenRoutes.id, route.id)).run()).changes;
