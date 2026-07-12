@@ -1259,7 +1259,7 @@ export async function refreshModelsForAccount(
       models.map((modelName) => ({
         tokenId: token.id,
         modelName,
-        available: true,
+        available: shouldEnableModel(modelName),
         latencyMs,
         checkedAt,
       })),
