@@ -55,6 +55,20 @@ export const siteDisabledModels = sqliteTable('site_disabled_models', {
   siteIdIdx: index('site_disabled_models_site_id_idx').on(table.siteId),
 }));
 
+export const siteModelAliases = sqliteTable('site_model_aliases', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  siteId: integer('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+  sourceModel: text('source_model').notNull(),
+  aliasModel: text('alias_model').notNull(),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (table) => ({
+  siteAliasUnique: uniqueIndex('site_model_aliases_site_alias_unique').on(table.siteId, table.aliasModel),
+  siteSourceAliasUnique: uniqueIndex('site_model_aliases_site_source_alias_unique').on(table.siteId, table.sourceModel, table.aliasModel),
+  siteIdIdx: index('site_model_aliases_site_id_idx').on(table.siteId),
+  aliasModelIdx: index('site_model_aliases_alias_model_idx').on(table.aliasModel),
+}));
+
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   siteId: integer('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),

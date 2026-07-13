@@ -13,12 +13,13 @@ import {
   parseSiteCreatePayload,
   parseSiteDetectPayload,
   parseSiteDisabledModelsPayload,
+  parseSiteModelAliasesPayload,
   parseSiteUpdatePayload,
 } from '../../contracts/siteRoutePayloads.js';
 import { getSiteInitializationPreset } from '../../../shared/siteInitializationPresets.js';
 import { normalizeSiteApiEndpointBaseUrl } from '../../services/siteApiEndpointService.js';
 import { analyzePrimarySiteUrl } from '../../../shared/sitePrimaryUrl.js';
-import { probeSiteModels } from '../../services/modelService.js';
+import { probeSiteModels, rebuildTokenRoutesFromAvailability } from '../../services/modelService.js';
 
 function sseWrite(raw: import('http').ServerResponse, event: string, data: unknown) {
   try { raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* ignore */ }
@@ -123,6 +124,26 @@ type SiteApiEndpointInputRow = {
   enabled: boolean;
   sortOrder: number;
 };
+
+type SiteModelAliasInputRow = { sourceModel: string; aliasModel: string };
+
+function normalizeSiteModelAliasesInput(input: unknown) {
+  if (input === undefined) return { valid: true, present: false, aliases: [] as SiteModelAliasInputRow[] };
+  if (!Array.isArray(input)) return { valid: false, present: true, aliases: [] as SiteModelAliasInputRow[], error: 'Invalid modelAliases.' };
+  const aliases: SiteModelAliasInputRow[] = [];
+  const seen = new Set<string>();
+  for (const item of input) {
+    const sourceModel = typeof item?.sourceModel === 'string' ? item.sourceModel.trim() : '';
+    const aliasModel = typeof item?.aliasModel === 'string' ? item.aliasModel.trim() : '';
+    if (!sourceModel || !aliasModel) return { valid: false, present: true, aliases: [], error: 'Model alias fields cannot be empty.' };
+    if (sourceModel === aliasModel) return { valid: false, present: true, aliases: [], error: 'aliasModel must differ from sourceModel.' };
+    const key = aliasModel.toLowerCase();
+    if (seen.has(key)) return { valid: false, present: true, aliases: [], error: `Duplicate aliasModel: ${aliasModel}` };
+    seen.add(key);
+    aliases.push({ sourceModel, aliasModel });
+  }
+  return { valid: true, present: true, aliases };
+}
 
 function normalizeSiteApiEndpointBoolean(input: unknown): boolean | null {
   return normalizePinnedFlag(input);
@@ -270,11 +291,22 @@ async function attachSiteApiEndpoints<T extends { id: number }>(siteRows: T[]) {
   }));
 }
 
+async function loadSiteModelAliases(siteId: number) {
+  return await db.select({
+    sourceModel: schema.siteModelAliases.sourceModel,
+    aliasModel: schema.siteModelAliases.aliasModel,
+  }).from(schema.siteModelAliases)
+    .where(eq(schema.siteModelAliases.siteId, siteId))
+    .orderBy(asc(schema.siteModelAliases.aliasModel))
+    .all();
+}
+
 async function loadSiteWithApiEndpoints(siteId: number) {
   const site = await db.select().from(schema.sites).where(eq(schema.sites.id, siteId)).get();
   if (!site) return null;
   const [hydrated] = await attachSiteApiEndpoints([site]);
-  return hydrated || null;
+  if (!hydrated) return null;
+  return { ...hydrated, modelAliases: await loadSiteModelAliases(siteId) };
 }
 
 function getErrorChain(error: unknown): ErrorLike[] {
@@ -460,8 +492,17 @@ export async function sitesRoutes(app: FastifyInstance) {
       subscriptionBySiteId[row.siteId] = aggregateSiteSubscription(subscriptionBySiteId[row.siteId], row.extraConfig);
     }
 
+    const aliasRows = await db.select().from(schema.siteModelAliases).all();
+    const aliasesBySiteId = new Map<number, Array<{ sourceModel: string; aliasModel: string }>>();
+    for (const row of aliasRows) {
+      const aliases = aliasesBySiteId.get(row.siteId) || [];
+      aliases.push({ sourceModel: row.sourceModel, aliasModel: row.aliasModel });
+      aliasesBySiteId.set(row.siteId, aliases);
+    }
+
     return siteRowsWithApiEndpoints.map((site) => ({
       ...site,
+      modelAliases: aliasesBySiteId.get(site.id) || [],
       totalBalance: Math.round((totalBalanceBySiteId[site.id] || 0) * 1_000_000) / 1_000_000,
       subscriptionSummary: subscriptionBySiteId[site.id] || null,
     }));
@@ -489,6 +530,7 @@ export async function sitesRoutes(app: FastifyInstance) {
       sortOrder,
       globalWeight,
       apiEndpoints,
+      modelAliases,
     } = createBody;
     const normalizedStatus = normalizeSiteStatus(status);
     if (status !== undefined && !normalizedStatus) {
@@ -536,6 +578,8 @@ export async function sitesRoutes(app: FastifyInstance) {
     if (!normalizedApiEndpoints.valid) {
       return reply.code(400).send({ error: normalizedApiEndpoints.error || 'Invalid apiEndpoints.' });
     }
+    const normalizedModelAliases = normalizeSiteModelAliasesInput(modelAliases);
+    if (!normalizedModelAliases.valid) return reply.code(400).send({ error: normalizedModelAliases.error });
 
     const existingSites = await db.select().from(schema.sites).all();
     const maxSortOrder = existingSites.reduce((max, site) => Math.max(max, site.sortOrder || 0), -1);
@@ -593,6 +637,11 @@ export async function sitesRoutes(app: FastifyInstance) {
             })),
           ).run();
         }
+        if (siteId && normalizedModelAliases.aliases.length > 0) {
+          await tx.insert(schema.siteModelAliases).values(
+            normalizedModelAliases.aliases.map((row) => ({ siteId, ...row })),
+          ).run();
+        }
         return siteInsert;
       });
     } catch (error) {
@@ -610,6 +659,7 @@ export async function sitesRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: 'Create site failed' });
     }
     invalidateSiteCaches();
+    if (normalizedModelAliases.aliases.length > 0) await rebuildTokenRoutesFromAvailability();
     return {
       ...result,
       ...(responseInitializationPresetId ? { initializationPresetId: responseInitializationPresetId } : {}),
@@ -675,6 +725,8 @@ export async function sitesRoutes(app: FastifyInstance) {
     if (!normalizedApiEndpoints.valid) {
       return reply.code(400).send({ error: normalizedApiEndpoints.error || 'Invalid apiEndpoints.' });
     }
+    const normalizedModelAliases = normalizeSiteModelAliasesInput(body.modelAliases);
+    if (!normalizedModelAliases.valid) return reply.code(400).send({ error: normalizedModelAliases.error });
 
     const canonicalPlatform = normalizeSitePlatform(body.platform);
     const nextUrl = body.url !== undefined ? normalizeCanonicalSiteUrl(body.url) : existingSite.url;
@@ -736,6 +788,14 @@ export async function sitesRoutes(app: FastifyInstance) {
             ).run();
           }
         }
+        if (normalizedModelAliases.present) {
+          await tx.delete(schema.siteModelAliases).where(eq(schema.siteModelAliases.siteId, id)).run();
+          if (normalizedModelAliases.aliases.length > 0) {
+            await tx.insert(schema.siteModelAliases).values(
+              normalizedModelAliases.aliases.map((row) => ({ siteId: id, ...row })),
+            ).run();
+          }
+        }
       });
     } catch (error) {
       if (isSitesPlatformUrlConflict(error)) {
@@ -749,6 +809,8 @@ export async function sitesRoutes(app: FastifyInstance) {
     }
 
     invalidateSiteCaches();
+
+    if (normalizedModelAliases.present) await rebuildTokenRoutesFromAvailability();
 
     return await loadSiteWithApiEndpoints(id);
   });
@@ -875,6 +937,47 @@ export async function sitesRoutes(app: FastifyInstance) {
 
     invalidateSiteCaches();
     return { siteId: id, models: uniqueModels };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/sites/:id/model-aliases', async (request, reply) => {
+    const id = parseInt(request.params.id);
+    if (Number.isNaN(id)) return reply.code(400).send({ error: 'Invalid site id' });
+    const existingSite = await db.select().from(schema.sites).where(eq(schema.sites.id, id)).get();
+    if (!existingSite) return reply.code(404).send({ error: 'Site not found' });
+    return { siteId: id, aliases: await loadSiteModelAliases(id) };
+  });
+
+  app.put<{ Params: { id: string }; Body: unknown }>('/api/sites/:id/model-aliases', async (request, reply) => {
+    const id = parseInt(request.params.id);
+    if (Number.isNaN(id)) return reply.code(400).send({ error: 'Invalid site id' });
+    const parsedBody = parseSiteModelAliasesPayload(request.body);
+    if (!parsedBody.success) return reply.code(400).send({ error: parsedBody.error });
+    const existingSite = await db.select().from(schema.sites).where(eq(schema.sites.id, id)).get();
+    if (!existingSite) return reply.code(404).send({ error: 'Site not found' });
+
+    const aliases = parsedBody.data.aliases.map((row) => ({
+      sourceModel: row.sourceModel.trim(),
+      aliasModel: row.aliasModel.trim(),
+    }));
+    const seenAliases = new Set<string>();
+    for (const row of aliases) {
+      const key = row.aliasModel.toLowerCase();
+      if (row.sourceModel === row.aliasModel) {
+        return reply.code(400).send({ error: 'aliasModel must differ from sourceModel.' });
+      }
+      if (seenAliases.has(key)) return reply.code(400).send({ error: `Duplicate aliasModel: ${row.aliasModel}` });
+      seenAliases.add(key);
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.siteModelAliases).where(eq(schema.siteModelAliases.siteId, id)).run();
+      if (aliases.length > 0) {
+        await tx.insert(schema.siteModelAliases).values(aliases.map((row) => ({ siteId: id, ...row }))).run();
+      }
+    });
+    await rebuildTokenRoutesFromAvailability();
+    invalidateSiteCaches();
+    return { siteId: id, aliases };
   });
 
   // Get all discovered models for a site (from model_availability and token_model_availability)

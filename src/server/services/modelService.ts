@@ -1376,6 +1376,14 @@ export async function rebuildTokenRoutesFromAvailability() {
 
   // Load site-level disabled models
   const disabledModelRows = await db.select().from(schema.siteDisabledModels).all();
+  const siteModelAliasRows = await db.select().from(schema.siteModelAliases).all();
+  const modelAliasesBySiteAndSource = new Map<string, string[]>();
+  for (const row of siteModelAliasRows) {
+    const key = `${row.siteId}:${row.sourceModel}`;
+    const aliases = modelAliasesBySiteAndSource.get(key) || [];
+    aliases.push(row.aliasModel);
+    modelAliasesBySiteAndSource.set(key, aliases);
+  }
   const disabledModelsBySite = new Map<number, Set<string>>();
   for (const row of disabledModelRows) {
     if (!disabledModelsBySite.has(row.siteId)) disabledModelsBySite.set(row.siteId, new Set());
@@ -1422,6 +1430,7 @@ export async function rebuildTokenRoutesFromAvailability() {
     accountId: number;
     tokenId: number | null;
     oauthRouteUnitId: number | null;
+    sourceModel: string | null;
   }>>();
   const buildCandidateKey = (input: {
     accountId: number;
@@ -1449,9 +1458,19 @@ export async function rebuildTokenRoutesFromAvailability() {
     if (!isModelAllowedByWhitelist(modelName)) return;
     if (isModelDisabledForSite(siteId, modelName)) return;
     if (blockedBrandRules.length > 0 && isModelBlockedByBrand(modelName, blockedBrandRules)) return;
-    if (!modelCandidates.has(modelName)) modelCandidates.set(modelName, new Map());
-    const candidate = { accountId, tokenId, oauthRouteUnitId };
-    modelCandidates.get(modelName)!.set(buildCandidateKey(candidate), candidate);
+    const candidate = { accountId, tokenId, oauthRouteUnitId, sourceModel: null as string | null };
+    const aliases = modelAliasesBySiteAndSource.get(`${siteId}:${modelName}`) || [];
+    if (aliases.length === 0) {
+      if (!modelCandidates.has(modelName)) modelCandidates.set(modelName, new Map());
+      modelCandidates.get(modelName)!.set(buildCandidateKey(candidate), candidate);
+    }
+    for (const aliasModel of aliases) {
+      if (!modelCandidates.has(aliasModel)) modelCandidates.set(aliasModel, new Map());
+      modelCandidates.get(aliasModel)!.set(buildCandidateKey(candidate), {
+        ...candidate,
+        sourceModel: modelName,
+      });
+    }
   };
 
   for (const row of usableTokenRows) {
@@ -1510,6 +1529,7 @@ export async function rebuildTokenRoutesFromAvailability() {
         accountId: candidate.accountId,
         tokenId: candidate.tokenId,
         oauthRouteUnitId: candidate.oauthRouteUnitId,
+        sourceModel: candidate.sourceModel,
         priority: 0,
         weight: 10,
         enabled: true,
@@ -1522,6 +1542,16 @@ export async function rebuildTokenRoutesFromAvailability() {
       channels.push(created);
       createdChannels++;
       desiredKeys.add(candidateKey);
+    }
+
+    for (const channel of routeChannels) {
+      const candidate = candidateMap.get(buildChannelKey(channel));
+      if (!candidate || channel.sourceModel === candidate.sourceModel) continue;
+      await db.update(schema.routeChannels)
+        .set({ sourceModel: candidate.sourceModel })
+        .where(eq(schema.routeChannels.id, channel.id))
+        .run();
+      channel.sourceModel = candidate.sourceModel;
     }
 
     for (const channel of routeChannels) {

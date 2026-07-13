@@ -1499,7 +1499,8 @@ function resolveActualModelForSelectedChannel(
   channelSourceModel: string | null | undefined,
 ): string {
   const sourceModel = normalizeChannelSourceModel(channelSourceModel);
-  if (isRouteDisplayNameMatch(requestedModel, route.displayName) && sourceModel) {
+  const exactRouteMatch = (route.modelPattern || '').trim() === requestedModel;
+  if ((isRouteDisplayNameMatch(requestedModel, route.displayName) || exactRouteMatch) && sourceModel) {
     return sourceModel;
   }
   return mappedModel;
@@ -1982,11 +1983,13 @@ export class TokenRouter {
     }
 
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = (options.bypassSourceModelCheck ?? false) || requestedByDisplayName;
-    const useChannelSourceModelForCost = (options.useChannelSourceModelForCost ?? false) || requestedByDisplayName;
+    const requestedBySourceMappedRoute = match.route.modelPattern === requestedModel
+      && match.channels.some((candidate) => normalizeChannelSourceModel(candidate.channel.sourceModel).length > 0);
+    const bypassSourceModelCheck = (options.bypassSourceModelCheck ?? false) || requestedByDisplayName || requestedBySourceMappedRoute;
+    const useChannelSourceModelForCost = (options.useChannelSourceModelForCost ?? false) || requestedByDisplayName || requestedBySourceMappedRoute;
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const routeStrategy = resolveRouteStrategy(match.route);
-    const runtimeModelResolver = requestedByDisplayName
+    const runtimeModelResolver = requestedByDisplayName || requestedBySourceMappedRoute
       ? ((candidate: RouteChannelCandidate) => normalizeChannelSourceModel(candidate.channel.sourceModel) || mappedModel)
       : mappedModel;
 
@@ -2413,7 +2416,9 @@ export class TokenRouter {
     if (!match) return;
 
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const useChannelSourceModelForCost = (options.useChannelSourceModelForCost ?? false) || requestedByDisplayName;
+    const requestedBySourceMappedRoute = match.route.modelPattern === requestedModel
+      && match.channels.some((candidate) => normalizeChannelSourceModel(candidate.channel.sourceModel).length > 0);
+    const useChannelSourceModelForCost = (options.useChannelSourceModelForCost ?? false) || requestedByDisplayName || requestedBySourceMappedRoute;
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const refreshedKeys = options.refreshedKeys ?? new Set<string>();
 
@@ -2848,9 +2853,11 @@ export class TokenRouter {
   ): Promise<SelectedChannel | null> {
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = requestedByDisplayName;
+    const requestedBySourceMappedRoute = match.route.modelPattern === requestedModel
+      && match.channels.some((candidate) => normalizeChannelSourceModel(candidate.channel.sourceModel).length > 0);
+    const bypassSourceModelCheck = requestedByDisplayName || requestedBySourceMappedRoute;
     const routeStrategy = resolveRouteStrategy(match.route);
-    const runtimeModelResolver = requestedByDisplayName
+    const runtimeModelResolver = requestedByDisplayName || requestedBySourceMappedRoute
       ? ((candidate: RouteChannelCandidate) => normalizeChannelSourceModel(candidate.channel.sourceModel) || mappedModel)
       : mappedModel;
 
@@ -2894,7 +2901,7 @@ export class TokenRouter {
       const rotationKey = this.buildStableFirstRotationKey(match.route.id, requestedModel);
       const poolPlan = buildStableFirstPoolPlan(
         candidates,
-        requestedByDisplayName ? runtimeModelResolver : mappedModel,
+        requestedByDisplayName || requestedBySourceMappedRoute ? runtimeModelResolver : mappedModel,
         nowMs,
       );
       const shouldUseObservation = (
@@ -2912,7 +2919,7 @@ export class TokenRouter {
         : (poolPlan.primaryCandidates.length > 0 ? poolPlan.primaryCandidates : poolPlan.observationCandidates);
       const selected = this.stableFirstSelect(
         selectionPool,
-        requestedByDisplayName ? runtimeModelResolver : mappedModel,
+        requestedByDisplayName || requestedBySourceMappedRoute ? runtimeModelResolver : mappedModel,
         downstreamPolicy,
         nowMs,
         shouldUseObservation ? `${rotationKey}:observe` : rotationKey,
@@ -2948,7 +2955,7 @@ export class TokenRouter {
       const candidates = filterRecentlyFailedCandidates(breakerFiltered.candidates, nowMs);
       const selected = this.weightedRandomSelect(
         candidates,
-        requestedByDisplayName ? runtimeModelResolver : mappedModel,
+        requestedByDisplayName || requestedBySourceMappedRoute ? runtimeModelResolver : mappedModel,
         downstreamPolicy,
         nowMs,
       );
@@ -2983,9 +2990,11 @@ export class TokenRouter {
   ): Promise<SelectedChannel | null> {
     const mappedModel = resolveMappedModel(requestedModel, match.route.modelMapping);
     const requestedByDisplayName = isRouteDisplayNameMatch(requestedModel, match.route.displayName);
-    const bypassSourceModelCheck = requestedByDisplayName;
+    const requestedBySourceMappedRoute = match.route.modelPattern === requestedModel
+      && match.channels.some((candidate) => normalizeChannelSourceModel(candidate.channel.sourceModel).length > 0);
+    const bypassSourceModelCheck = requestedByDisplayName || requestedBySourceMappedRoute;
     const routeStrategy = resolveRouteStrategy(match.route);
-    const runtimeModelResolver = requestedByDisplayName
+    const runtimeModelResolver = requestedByDisplayName || requestedBySourceMappedRoute
       ? ((candidate: RouteChannelCandidate) => normalizeChannelSourceModel(candidate.channel.sourceModel) || mappedModel)
       : mappedModel;
 

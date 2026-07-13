@@ -28,9 +28,11 @@ import {
   buildSiteSaveAction,
   emptySiteApiEndpoint,
   emptySiteCustomHeader,
+  emptySiteModelAlias,
   emptySiteForm,
   serializeSiteApiEndpoints,
   serializeSiteCustomHeaders,
+  serializeSiteModelAliases,
   siteFormFromSite,
   type SiteEditorState,
   type SiteApiEndpointField,
@@ -82,6 +84,7 @@ type SiteRow = {
     cooldownUntil?: string | null;
     lastFailureReason?: string | null;
   }>;
+  modelAliases?: Array<{ sourceModel: string; aliasModel: string }>;
 };
 
 function hasConfiguredCustomHeaders(customHeaders?: string | null): boolean {
@@ -757,6 +760,11 @@ export default function Sites() {
       toast.error(serializedApiEndpoints.error || 'API 请求地址格式不正确');
       return;
     }
+    const serializedModelAliases = serializeSiteModelAliases(form.modelAliases);
+    if (!serializedModelAliases.valid) {
+      toast.error(serializedModelAliases.error || '模型别名格式不正确');
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
@@ -774,6 +782,7 @@ export default function Sites() {
       postRefreshProbeModel: probeModel.trim(),
       postRefreshProbeScope: probeScope,
       postRefreshProbeLatencyThresholdMs: Math.max(0, parseInt(probeLatencyThreshold, 10) || 0),
+      modelAliases: serializedModelAliases.aliases,
     };
     if (!payload.name || !payload.url) {
       toast.error('请填写站点名称和 URL');
@@ -785,6 +794,7 @@ export default function Sites() {
       const action = buildSiteSaveAction(editor, payload);
       if (action.kind === 'add') {
         const created = await api.addSite(action.payload);
+        const createdSiteId = Number(created?.id) || 0;
         toast.success(`站点 "${payload.name}" 已添加`);
         if (
           primarySiteUrlAnalysis.action === 'auto_strip_known_api_suffix'
@@ -793,7 +803,6 @@ export default function Sites() {
         ) {
           toast.info(`已自动规范化主站点 URL 为 ${created.url.trim()}`);
         }
-        const createdSiteId = Number(created?.id) || 0;
         if (createdSiteId > 0) {
           const createdPlatform = typeof created?.platform === 'string' && created.platform.trim()
             ? created.platform.trim()
@@ -898,6 +907,23 @@ export default function Sites() {
       };
     });
   };
+
+  const addModelAliasRow = () => setForm((prev) => ({
+    ...prev,
+    modelAliases: [...prev.modelAliases, emptySiteModelAlias()],
+  }));
+
+  const updateModelAliasRow = (index: number, patch: Partial<{ sourceModel: string; aliasModel: string }>) => {
+    setForm((prev) => ({
+      ...prev,
+      modelAliases: prev.modelAliases.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row),
+    }));
+  };
+
+  const removeModelAliasRow = (index: number) => setForm((prev) => ({
+    ...prev,
+    modelAliases: prev.modelAliases.filter((_, rowIndex) => rowIndex !== index),
+  }));
 
   /**
    * 从站点页进入账号/API Key 连接创建流程。
@@ -1525,6 +1551,55 @@ export default function Sites() {
                     </button>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'color-mix(in srgb, var(--color-surface) 82%, transparent)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>模型别名映射</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  客户端使用对外模型名，上游仍收到真实模型名。例如 mimo-v2.5 → qing/mimo-v2.5。
+                </div>
+              </div>
+              <button type="button" onClick={addModelAliasRow} className="btn btn-ghost" style={{ border: '1px solid var(--color-border)' }}>
+                + 添加映射
+              </button>
+            </div>
+            <datalist id="site-model-alias-suggestions">
+              {availableModels.map((model) => <option key={model} value={model} />)}
+            </datalist>
+            {form.modelAliases.length === 0 ? (
+              <button type="button" onClick={addModelAliasRow} className="btn btn-ghost" style={{ border: '1px dashed var(--color-border)', padding: 14 }}>
+                添加第一条模型映射
+              </button>
+            ) : form.modelAliases.map((row, index) => (
+              <div key={`model-alias-${index}`} style={{ display: 'flex', gap: 8, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+                  {isMobile && availableModels.length > 0 ? (
+                    <select
+                      aria-label="选择已发现的上游模型"
+                      value={availableModels.includes(row.sourceModel) ? row.sourceModel : ''}
+                      onChange={(e) => {
+                        if (e.target.value) updateModelAliasRow(index, { sourceModel: e.target.value });
+                      }}
+                      style={{ ...formInputStyle, fontFamily: 'var(--font-mono)', minHeight: 42 }}
+                    >
+                      <option value="">从已发现模型中选择（{availableModels.length}）</option>
+                      {availableModels.map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                  ) : null}
+                  <input
+                    list={isMobile ? undefined : 'site-model-alias-suggestions'}
+                    placeholder={isMobile ? '也可手工输入上游模型' : '上游模型，如 mimo-v2.5'}
+                    value={row.sourceModel}
+                    onChange={(e) => updateModelAliasRow(index, { sourceModel: e.target.value })}
+                    style={{ ...formInputStyle, fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
+                <span aria-hidden="true" style={{ color: 'var(--color-text-muted)', textAlign: 'center' }}>{isMobile ? '映射为 ↓' : '→'}</span>
+                <input placeholder="对外模型，如 qing/mimo-v2.5" value={row.aliasModel} onChange={(e) => updateModelAliasRow(index, { aliasModel: e.target.value })} style={{ ...formInputStyle, flex: 1, fontFamily: 'var(--font-mono)' }} />
+                <button type="button" onClick={() => removeModelAliasRow(index)} className="btn btn-link btn-link-danger">删除</button>
               </div>
             ))}
           </div>

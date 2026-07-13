@@ -11,6 +11,11 @@ export type SiteApiEndpointField = {
   lastFailureReason?: string | null;
 };
 
+export type SiteModelAliasField = {
+  sourceModel: string;
+  aliasModel: string;
+};
+
 export type SiteForm = {
   name: string;
   url: string;
@@ -22,6 +27,7 @@ export type SiteForm = {
   customHeaders: SiteCustomHeaderField[];
   clientSpoofing: string;
   globalWeight: string;
+  modelAliases: SiteModelAliasField[];
 };
 
 export type SiteEditorState =
@@ -67,6 +73,10 @@ export function emptySiteApiEndpoint(): SiteApiEndpointField {
   };
 }
 
+export function emptySiteModelAlias(): SiteModelAliasField {
+  return { sourceModel: '', aliasModel: '' };
+}
+
 function ensureSiteCustomHeaderRows(rows: SiteCustomHeaderField[]): SiteCustomHeaderField[] {
   return rows.length > 0 ? rows : [emptySiteCustomHeader()];
 }
@@ -83,6 +93,7 @@ export function emptySiteForm(): SiteForm {
     customHeaders: [emptySiteCustomHeader()],
     clientSpoofing: 'none',
     globalWeight: '1',
+    modelAliases: [emptySiteModelAlias()],
   };
 }
 
@@ -147,6 +158,7 @@ export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | '
   customHeaders?: string | null;
   clientSpoofing?: string | null;
   globalWeight?: number | string | null;
+  modelAliases?: Array<{ sourceModel?: string | null; aliasModel?: string | null }> | null;
 }): SiteForm {
   const globalWeightRaw = Number(site.globalWeight);
   const globalWeight = Number.isFinite(globalWeightRaw) && globalWeightRaw > 0 ? String(globalWeightRaw) : '1';
@@ -162,7 +174,31 @@ export function siteFormFromSite(site: Partial<Omit<SiteForm, 'apiEndpoints' | '
     customHeaders: parseCustomHeadersForEditor(site.customHeaders),
     clientSpoofing,
     globalWeight,
+    modelAliases: Array.isArray(site.modelAliases) && site.modelAliases.length > 0
+      ? site.modelAliases.map((row) => ({ sourceModel: row.sourceModel || '', aliasModel: row.aliasModel || '' }))
+      : [emptySiteModelAlias()],
   };
+}
+
+export function serializeSiteModelAliases(fields: SiteModelAliasField[]): {
+  valid: boolean;
+  aliases: SiteModelAliasField[];
+  error?: string;
+} {
+  const aliases: SiteModelAliasField[] = [];
+  const seen = new Set<string>();
+  for (const field of fields) {
+    const sourceModel = field.sourceModel.trim();
+    const aliasModel = field.aliasModel.trim();
+    if (!sourceModel && !aliasModel) continue;
+    if (!sourceModel || !aliasModel) return { valid: false, aliases: [], error: '模型原名和对外别名必须同时填写' };
+    if (sourceModel === aliasModel) return { valid: false, aliases: [], error: '模型别名必须与上游模型不同' };
+    const key = aliasModel.toLowerCase();
+    if (seen.has(key)) return { valid: false, aliases: [], error: `模型别名 "${aliasModel}" 重复了` };
+    seen.add(key);
+    aliases.push({ sourceModel, aliasModel });
+  }
+  return { valid: true, aliases };
 }
 
 // Keep this in sync with normalizeSiteApiEndpointBaseUrl in

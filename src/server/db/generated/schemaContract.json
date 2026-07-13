@@ -531,6 +531,12 @@
           "notNull": false,
           "defaultValue": null,
           "primaryKey": false
+        },
+        "auto_sync_routes": {
+          "logicalType": "integer",
+          "notNull": false,
+          "defaultValue": "0",
+          "primaryKey": false
         }
       }
     },
@@ -1998,6 +2004,46 @@
         }
       }
     },
+    "site_model_aliases": {
+      "columns": {
+        "id": {
+          "logicalType": "integer",
+          "notNull": true,
+          "defaultValue": null,
+          "primaryKey": true
+        },
+        "site_id": {
+          "logicalType": "integer",
+          "notNull": true,
+          "defaultValue": null,
+          "primaryKey": false
+        },
+        "source_model": {
+          "logicalType": "text",
+          "notNull": true,
+          "defaultValue": null,
+          "primaryKey": false
+        },
+        "alias_model": {
+          "logicalType": "text",
+          "notNull": true,
+          "defaultValue": null,
+          "primaryKey": false
+        },
+        "created_at": {
+          "logicalType": "datetime",
+          "notNull": false,
+          "defaultValue": "datetime('now')",
+          "primaryKey": false
+        },
+        "updated_at": {
+          "logicalType": "datetime",
+          "notNull": false,
+          "defaultValue": "datetime('now')",
+          "primaryKey": false
+        }
+      }
+    },
     "sites": {
       "columns": {
         "id": {
@@ -2112,6 +2158,12 @@
           "logicalType": "integer",
           "notNull": false,
           "defaultValue": "0",
+          "primaryKey": false
+        },
+        "client_spoofing": {
+          "logicalType": "text",
+          "notNull": false,
+          "defaultValue": "'none'",
           "primaryKey": false
         }
       }
@@ -2884,6 +2936,41 @@
       "unique": false
     },
     {
+      "name": "site_model_aliases_alias_model_idx",
+      "table": "site_model_aliases",
+      "columns": [
+        "alias_model"
+      ],
+      "unique": false
+    },
+    {
+      "name": "site_model_aliases_site_alias_unique",
+      "table": "site_model_aliases",
+      "columns": [
+        "site_id",
+        "alias_model"
+      ],
+      "unique": true
+    },
+    {
+      "name": "site_model_aliases_site_id_idx",
+      "table": "site_model_aliases",
+      "columns": [
+        "site_id"
+      ],
+      "unique": false
+    },
+    {
+      "name": "site_model_aliases_site_source_alias_unique",
+      "table": "site_model_aliases",
+      "columns": [
+        "site_id",
+        "source_model",
+        "alias_model"
+      ],
+      "unique": true
+    },
+    {
       "name": "sites_platform_url_unique",
       "table": "sites",
       "columns": [
@@ -3067,6 +3154,23 @@
       "columns": [
         "bucket_start_utc",
         "site_id"
+      ]
+    },
+    {
+      "name": "site_model_aliases_site_alias_unique",
+      "table": "site_model_aliases",
+      "columns": [
+        "site_id",
+        "alias_model"
+      ]
+    },
+    {
+      "name": "site_model_aliases_site_source_alias_unique",
+      "table": "site_model_aliases",
+      "columns": [
+        "site_id",
+        "source_model",
+        "alias_model"
       ]
     },
     {
@@ -3287,6 +3391,17 @@
     },
     {
       "table": "site_hour_usage",
+      "columns": [
+        "site_id"
+      ],
+      "referencedTable": "sites",
+      "referencedColumns": [
+        "id"
+      ],
+      "onDelete": "CASCADE"
+    },
+    {
+      "table": "site_model_aliases",
       "columns": [
         "site_id"
       ],

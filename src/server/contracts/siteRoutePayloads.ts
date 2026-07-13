@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 const requiredTrimmedString = z.string().trim().min(1);
 const unknownField = z.unknown().optional();
+const siteModelAliasSchema = z.object({
+  sourceModel: requiredTrimmedString,
+  aliasModel: requiredTrimmedString,
+});
 
 const siteCreatePayloadSchema = z.object({
   name: requiredTrimmedString,
@@ -17,6 +21,7 @@ const siteCreatePayloadSchema = z.object({
   isPinned: unknownField,
   sortOrder: unknownField,
   globalWeight: unknownField,
+  modelAliases: z.array(siteModelAliasSchema).optional(),
 }).passthrough();
 
 const siteUpdatePayloadSchema = z.object({
@@ -32,6 +37,7 @@ const siteUpdatePayloadSchema = z.object({
   isPinned: unknownField,
   sortOrder: unknownField,
   globalWeight: unknownField,
+  modelAliases: z.array(siteModelAliasSchema).optional(),
 }).passthrough();
 
 const siteBatchPayloadSchema = z.object({
@@ -43,6 +49,10 @@ const siteDisabledModelsPayloadSchema = z.object({
   models: z.array(z.string()).optional(),
 }).passthrough();
 
+const siteModelAliasesPayloadSchema = z.object({
+  aliases: z.array(siteModelAliasSchema),
+});
+
 const siteDetectPayloadSchema = z.object({
   url: requiredTrimmedString,
 }).passthrough();
@@ -51,6 +61,7 @@ export type SiteBatchPayload = z.output<typeof siteBatchPayloadSchema>;
 export type SiteCreatePayload = z.output<typeof siteCreatePayloadSchema>;
 export type SiteDetectPayload = z.output<typeof siteDetectPayloadSchema>;
 export type SiteDisabledModelsPayload = z.output<typeof siteDisabledModelsPayloadSchema>;
+export type SiteModelAliasesPayload = z.output<typeof siteModelAliasesPayloadSchema>;
 export type SiteUpdatePayload = z.output<typeof siteUpdatePayloadSchema>;
 
 function normalizeSitePayloadInput(input: unknown): unknown {
@@ -79,6 +90,9 @@ function formatSitePayloadError(error: z.ZodError): string {
   }
   if (firstPath === 'models') {
     return 'Invalid models. Expected string[].';
+  }
+  if (firstPath === 'aliases' || firstPath === 'sourceModel' || firstPath === 'aliasModel') {
+    return 'Invalid aliases. Expected non-empty sourceModel and aliasModel strings.';
   }
   return 'Invalid site payload.';
 }
@@ -141,6 +155,15 @@ export function parseSiteDisabledModelsPayload(input: unknown):
     success: true,
     data: result.data,
   };
+}
+
+export function parseSiteModelAliasesPayload(input: unknown):
+{ success: true; data: SiteModelAliasesPayload } | { success: false; error: string } {
+  const result = siteModelAliasesPayloadSchema.safeParse(normalizeSitePayloadInput(input));
+  if (!result.success) {
+    return { success: false, error: formatSitePayloadError(result.error) };
+  }
+  return { success: true, data: result.data };
 }
 
 export function parseSiteDetectPayload(input: unknown):

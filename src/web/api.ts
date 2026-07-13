@@ -784,6 +784,13 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ models }),
     }),
+  getSiteModelAliases: (siteId: number) =>
+    request(`/api/sites/${siteId}/model-aliases`),
+  updateSiteModelAliases: (siteId: number, aliases: Array<{ sourceModel: string; aliasModel: string }>) =>
+    request(`/api/sites/${siteId}/model-aliases`, {
+      method: "PUT",
+      body: JSON.stringify({ aliases }),
+    }),
   getSiteAvailableModels: (siteId: number) =>
     request(`/api/sites/${siteId}/available-models`),
   probeSiteNow: (siteId: number, options?: { scope?: 'single' | 'all'; modelName?: string; latencyThresholdMs?: number }) =>
